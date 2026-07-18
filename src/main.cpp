@@ -14,20 +14,26 @@
 
 #include <libusb.h>
 
-constexpr int ROWS = 11;
-constexpr int MAX_PAYLOAD = 8192;
-constexpr int REPORT_SIZE = 64;
-constexpr int COLUMN_WIDTH = 8;
-constexpr int BRIGHTNESS_DIV = 127;
-constexpr int ASCII_GLYPH_WIDTH = 8;
-constexpr int GBK_GLYPH_WIDTH = 11;
-constexpr int GBK_STORAGE_WIDTH = 16; // HZK11 stores 16-pixel rows
-constexpr int GBK_LEAD_MIN = 0x81;
-constexpr int GBK_TRAIL_MIN = 0x40;
-constexpr int GBK_TRAIL_COUNT = 191;
-constexpr int GBK_BYTES_PER_ROW = 2; // HZK11 stores 16-bit rows
-constexpr int GBK_GLYPH_SIZE = ROWS * GBK_BYTES_PER_ROW;
-constexpr uint8_t ASCII_MAX = 0x7F;
+// ── display / protocol ──
+constexpr int ROWS = 11;            // display height in pixels
+constexpr int MAX_PAYLOAD = 8192;   // CH546 safe limit (bytes)
+constexpr int REPORT_SIZE = 64;     // HID report size (bytes)
+constexpr int COLUMN_WIDTH = 8;     // bits per packed column group
+constexpr int BRIGHTNESS_DIV = 127; // vendor / pack_image binary threshold
+constexpr int STB_THRESHOLD = 96;   // stb_truetype grayscale → binary threshold
+constexpr int BRIGHT = 255;
+constexpr int DARK = 0;
+// ── vendor font metrics ──
+constexpr int ASCII_GLYPH_WIDTH = 8;                     // ASC11 glyph width
+constexpr int GBK_GLYPH_WIDTH = 11;                      // HZK11 glyph width (used)
+constexpr int GBK_STORAGE_WIDTH = 16;                    // HZK11 glyph width (stored)
+constexpr int GBK_BYTES_PER_ROW = 2;                     // HZK11: 16-bit rows → 2 bytes
+constexpr int GBK_GLYPH_SIZE = ROWS * GBK_BYTES_PER_ROW; // 22 bytes per GBK glyph
+// ── GBK codec ──
+constexpr int GBK_LEAD_MIN = 0x81;   // first lead byte in HZK11
+constexpr int GBK_TRAIL_MIN = 0x40;  // first trail byte in HZK11
+constexpr int GBK_TRAIL_COUNT = 191; // trail slots per lead byte
+constexpr uint8_t ASCII_MAX = 0x7F;  // bytes ≤ this are ASCII, > are GBK
 
 constexpr std::array<uint8_t, 64> HEADER_TEMPLATE = {
     0x77, 0x61, 0x6E, 0x67, 0x00, 0x00, 0x00, 0x00, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40,
@@ -36,26 +42,27 @@ constexpr std::array<uint8_t, 64> HEADER_TEMPLATE = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-// UTF-8 encoding constants (RFC 3629)
+// UTF-8 codec (RFC 3629)
+// Layout: leading byte → codepoint data bits, trailer bytes each carry 6 bits
 namespace utf8
 {
-constexpr unsigned char ASCII_LIMIT = 0x80;
-constexpr unsigned char TWO_MASK = 0xE0;
+constexpr unsigned char ASCII_LIMIT = 0x80; // 0xxxxxxx → single-byte ASCII
+constexpr unsigned char TWO_MASK = 0xE0;    // 110xxxxx → 2-byte sequence
 constexpr unsigned char TWO_MATCH = 0xC0;
-constexpr unsigned char TWO_BITS = 0x1F;
-constexpr unsigned char THREE_MASK = 0xF0;
+constexpr unsigned char TWO_BITS = 0x1F;   // codepoint bits in lead byte
+constexpr unsigned char THREE_MASK = 0xF0; // 1110xxxx → 3-byte (CJK)
 constexpr unsigned char THREE_MATCH = 0xE0;
 constexpr unsigned char THREE_BITS = 0x0F;
-constexpr unsigned char FOUR_MASK = 0xF8;
+constexpr unsigned char FOUR_MASK = 0xF8; // 11110xxx → 4-byte (emoji)
 constexpr unsigned char FOUR_MATCH = 0xF0;
 constexpr unsigned char FOUR_BITS = 0x07;
-constexpr int SHIFT = 6; // cont​inuation byte: 10xxxxxx → 6 bits
-constexpr unsigned char TRAIL_BITS = 0x3F;
+constexpr int SHIFT = 6;                   // each trailer contributes 6 bits
+constexpr unsigned char TRAIL_BITS = 0x3F; // 10xxxxxx → extract 6 data bits
 } // namespace utf8
 
 constexpr uint16_t VID = 0x0416;
 constexpr uint16_t PID = 0x5020;
-
+constexpr unsigned int TRANSFER_TIMEOUT = 3000;
 struct BadgeDevice
 {
     libusb_device_handle *handle;
@@ -65,18 +72,22 @@ struct BadgeDevice
     static auto find_all() -> std::vector<BadgeDevice>;
     auto write(const std::vector<uint8_t> &payload) -> void
     {
-        for (size_t offset = 0; offset < payload.size(); offset += 64)
+        for (size_t offset = 0; offset < payload.size(); offset += REPORT_SIZE)
         {
             int written = 0;
-            libusb_interrupt_transfer(handle, endpoint_out, payload.data() + offset, 64, &written,
-                                      3000);
-            uint8_t ack[64];
+            libusb_interrupt_transfer(handle, endpoint_out,
+                                      const_cast<uint8_t *>(payload.data()) + offset, REPORT_SIZE,
+                                      &written, TRANSFER_TIMEOUT);
+            uint8_t ack[REPORT_SIZE]; // NOLINT(modernize-avoid-c-arrays)
             int read = 0;
-            libusb_interrupt_transfer(handle, endpoint_in, ack, 64, &read, 3000);
+            libusb_interrupt_transfer(handle, endpoint_in, ack, REPORT_SIZE, &read,
+                                      TRANSFER_TIMEOUT);
         }
     };
-    auto close() -> void {
-        if (handle != nullptr) {
+    auto close() -> void
+    {
+        if (handle != nullptr)
+        {
             libusb_close(handle);
             handle = nullptr;
         }
@@ -142,6 +153,7 @@ auto render_vendor(const std::string &text, const VendorFont &vf) -> GlyphBitmap
     while (i < gbk_bytes.size())
     {
         uint8_t byte0 = gbk_bytes[i++];
+        // judge whether ascii glyph or gbk glyph
         total_width += (byte0 <= ASCII_MAX) ? ASCII_GLYPH_WIDTH : GBK_GLYPH_WIDTH;
         if (byte0 > ASCII_MAX) i++;
     }
@@ -162,7 +174,7 @@ auto render_vendor(const std::string &text, const VendorFont &vf) -> GlyphBitmap
                 for (int x = 0; x < ASCII_GLYPH_WIDTH; x++)
                 {
                     pixels[(row * total_width) + cursor + x] =
-                        (((row_data >> (ASCII_GLYPH_WIDTH - 1 - x)) & 1) != 0) ? 255 : 0;
+                        (((row_data >> (ASCII_GLYPH_WIDTH - 1 - x)) & 1) != 0) ? BRIGHT : DARK;
                 }
             }
             cursor += ASCII_GLYPH_WIDTH;
@@ -176,12 +188,13 @@ auto render_vendor(const std::string &text, const VendorFont &vf) -> GlyphBitmap
             for (int row = 0; row < ROWS; row++)
             {
                 auto row_data = static_cast<uint16_t>(
-                    (static_cast<uint16_t>(vf.gbk[offset + (row * GBK_BYTES_PER_ROW)]) << 8) |
+                    (static_cast<uint16_t>(vf.gbk[offset + (row * GBK_BYTES_PER_ROW)])
+                     << 8) | // NOLINT(readability-magic-numbers), why warn me here??
                     vf.gbk[offset + (row * GBK_BYTES_PER_ROW) + 1]);
                 for (int x = 0; x < GBK_GLYPH_WIDTH; x++)
                 {
                     pixels[(row * total_width) + cursor + x] =
-                        (((row_data >> (GBK_STORAGE_WIDTH - 1 - x)) & 1) != 0) ? 255 : 0;
+                        (((row_data >> (GBK_STORAGE_WIDTH - 1 - x)) & 1) != 0) ? BRIGHT : DARK;
                 }
             }
             cursor += GBK_GLYPH_WIDTH;
@@ -205,7 +218,7 @@ auto utf8_to_gbk(const std::string &utf8) -> std::vector<uint8_t>
     iconv_t converter = iconv_open("GBK", "UTF-8");
     if (converter == iconv_t(-1)) // NOLINT(performance-no-int-to-ptr)
     {
-        throw std::runtime_error("iconv_open UTF-8→GBK 失败");
+        throw std::runtime_error("iconv_open 从 UTF-8 转换到 GBK 失败");
     }
 
     size_t in_bytes = utf8.size();
@@ -265,8 +278,8 @@ auto next_codepoint(const char *&ptr) -> int
     return cp;
 }
 
-auto render_text(const std::string &text, const std::string &font_path, int font_size = 11,
-                 int threshold = 96) -> GlyphBitmap
+auto render_text(const std::string &text, const std::string &font_path, int font_size = ROWS,
+                 int threshold = STB_THRESHOLD) -> GlyphBitmap
 {
     constexpr int MIN_FONT_SIZE = 5;
     // read font file
@@ -338,7 +351,7 @@ auto render_text(const std::string &text, const std::string &font_path, int font
                 uint8_t val = glyph[(gy * w) + gx];
                 if (val > threshold)
                 {
-                    pixels[(py * total_width) + px] = 255;
+                    pixels[(py * total_width) + px] = BRIGHT;
                 }
             }
         }
@@ -369,7 +382,7 @@ auto main() -> int
     {
         for (int col = 0; col < glyph.width; col++)
         {
-            std::cout << (glyph.pixels[(row * glyph.width) + col] > 127 ? "\033[47m \033[0m" : " ");
+            std::cout << (glyph.pixels[(row * glyph.width) + col] > BRIGHTNESS_DIV ? "\033[47m \033[0m" : " ");
         }
         std::cout << '\n';
     }
