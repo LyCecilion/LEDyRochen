@@ -10,6 +10,9 @@ Checks: >
   readability-*,
   -readability-braces-around-statements
   -readability-isolate-declaration
+  -readability-*-length
+  -misc-non-private-member-variables-in-classes
+  -bugprone-easily-swappable-parameters
 
 WarningsAsErrors: >
   bugprone-*,
