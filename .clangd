@@ -19,6 +19,8 @@ Diagnostics:
       - misc-non-private-member-variables-in-classes
       - bugprone-easily-swappable-parameters
       - readability-*-length
+    CheckOptions:
+      readability-function-cognitive-complexity.Threshold: 40
 
 
 Index:

@@ -19,10 +19,17 @@ FetchContent_MakeAvailable(stb)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 
-add_executable(ledyrochen src/main.cpp)
+add_executable(ledyrochen
+  src/main.cpp
+  src/utils.cpp
+  src/pack.cpp
+  src/device.cpp
+  src/vendor_font.cpp
+  src/truetype.cpp
+)
 target_link_libraries(ledyrochen PRIVATE ${LIBUSB_LIBRARIES})
-target_include_directories(ledyrochen PRIVATE ${LIBUSB_INCLUDE_DIRS})
-target_include_directories(ledyrochen PRIVATE ${stb_SOURCE_DIR})
+target_include_directories(ledyrochen SYSTEM PRIVATE ${LIBUSB_INCLUDE_DIRS})
+target_include_directories(ledyrochen SYSTEM PRIVATE ${stb_SOURCE_DIR})
 
 target_compile_features(ledyrochen PRIVATE cxx_std_20)
 set_target_properties(ledyrochen PROPERTIES CXX_EXTENSIONS OFF)
