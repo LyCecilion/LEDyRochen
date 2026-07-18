@@ -53,8 +53,12 @@ auto test_pack_image() -> void
 
 auto test_header_and_payload() -> void
 {
-    const DisplaySettings settings{
-        .speed = 4, .mode = DisplayMode::up, .brightness = 50, .blink = true, .border = true};
+    DisplaySettings settings;
+    settings.slots[0].speed = 4;
+    settings.slots[0].mode = DisplayMode::up;
+    settings.slots[0].blink = true;
+    settings.slots[0].border = true;
+    settings.brightness = 50;
     const ProtocolTimestamp timestamp{
         .year = 2026, .month = 7, .day = 17, .hour = 19, .minute = 0, .second = 1};
     const std::array<uint16_t, 1> lengths{3};

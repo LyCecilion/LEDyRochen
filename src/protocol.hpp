@@ -22,13 +22,18 @@ enum class DisplayMode : uint8_t
     laser,
 };
 
-struct DisplaySettings
+struct SlotSettings
 {
     int speed{4};
     DisplayMode mode{DisplayMode::left};
-    int brightness{50};
     bool blink{false};
     bool border{false};
+};
+
+struct DisplaySettings
+{
+    std::array<SlotSettings, MAX_MESSAGES> slots{};
+    int brightness{50};
 };
 
 struct ProtocolTimestamp

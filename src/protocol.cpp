@@ -12,14 +12,18 @@ namespace
 {
 auto validate_settings(const DisplaySettings &settings) -> void
 {
-    if (settings.speed < 1 || settings.speed > 8)
+    for (std::size_t i = 0; i < settings.slots.size(); ++i)
     {
-        throw std::invalid_argument("speed 必须在 1..8 之间");
-    }
-    const int mode = static_cast<int>(settings.mode);
-    if (mode < 0 || mode > 8)
-    {
-        throw std::invalid_argument("mode 必须在 0..8 之间");
+        const auto &slot = settings.slots[i];
+        if (slot.speed < 1 || slot.speed > 8)
+        {
+            throw std::invalid_argument("slot " + std::to_string(i) + " 的 speed 必须在 1..8 之间");
+        }
+        const int mode = static_cast<int>(slot.mode);
+        if (mode < 0 || mode > 8)
+        {
+            throw std::invalid_argument("slot " + std::to_string(i) + " 的 mode 必须在 0..8 之间");
+        }
     }
     if (settings.brightness != 25 && settings.brightness != 50 && settings.brightness != 75 &&
         settings.brightness != 100)
@@ -83,13 +87,21 @@ auto build_header(std::span<const uint16_t> lengths, const DisplaySettings &sett
 
     auto header = HEADER_TEMPLATE;
     header[5] = brightness_code(settings.brightness);
-    const auto active_bits = static_cast<uint8_t>((1U << lengths.size()) - 1U);
-    header[6] = settings.blink ? active_bits : 0;
-    header[7] = settings.border ? active_bits : 0;
 
-    const auto setting =
-        static_cast<uint8_t>((16 * (settings.speed - 1)) + static_cast<int>(settings.mode));
-    std::fill(header.begin() + 8, header.begin() + 16, setting);
+    header[6] = 0;
+    header[7] = 0;
+    for (std::size_t i = 0; i < lengths.size(); ++i)
+    {
+        if (settings.slots[i].blink) header[6] |= static_cast<uint8_t>(1U << i);
+        if (settings.slots[i].border) header[7] |= static_cast<uint8_t>(1U << i);
+    }
+
+    for (std::size_t i = 0; i < MAX_MESSAGES; ++i)
+    {
+        const auto &slot = settings.slots[i];
+        header[8 + i] =
+            static_cast<uint8_t>((16 * (slot.speed - 1)) + static_cast<int>(slot.mode));
+    }
     for (std::size_t index = 0; index < lengths.size(); ++index)
     {
         header[16 + (2 * index)] = static_cast<uint8_t>(lengths[index] >> 8U);

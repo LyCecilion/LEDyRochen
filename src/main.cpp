@@ -49,11 +49,11 @@ auto print_help(std::ostream &output) -> void
   --no-vendor-font        禁用原版点阵字库
   --font-size N           初始字号，默认 11
   --threshold N           二值化阈值 0..255，默认 96
-  --speed N               速度 1..8，默认 4
-  --mode MODE             left/right/up/down/still/animation/drop/curtain/laser 或 0..8
+  --speed N[,N...]        每条消息的速度 1..8，逗号分隔，默认 4
+  --mode MODE[,MODE...]   每条消息的显示方式，逗号分隔，默认 left
   --brightness N          25、50、75 或 100，默认 50
-  --blink                 启用闪烁
-  --border                启用循环灯边框
+  --blink SLOT[,SLOT...]  对指定编号的消息启用闪烁 (1..8 或 all)
+  --border SLOT[,SLOT...] 对指定编号的消息启用边框 (1..8 或 all)
   -h, --help              显示帮助
 )";
 }
@@ -102,6 +102,44 @@ auto parse_mode(std::string_view value) -> DisplayMode
     return static_cast<DisplayMode>(numeric);
 }
 
+auto split_values(std::string_view text) -> std::vector<std::string_view>
+{
+    std::vector<std::string_view> parts;
+    std::size_t start = 0;
+    while (start <= text.size())
+    {
+        auto end = text.find(',', start);
+        if (end == std::string_view::npos) end = text.size();
+        auto part = text.substr(start, end - start);
+        auto first = part.find_first_not_of(' ');
+        auto last = part.find_last_not_of(' ');
+        if (first != std::string_view::npos)
+            parts.push_back(part.substr(first, last - first + 1));
+        start = end + 1;
+    }
+    return parts;
+}
+
+auto parse_slot_indices(std::string_view text) -> std::vector<std::size_t>
+{
+    if (text == "all")
+    {
+        std::vector<std::size_t> all(MAX_MESSAGES);
+        for (std::size_t i = 0; i < MAX_MESSAGES; ++i) all[i] = i;
+        return all;
+    }
+    auto parts = split_values(text);
+    std::vector<std::size_t> indices;
+    for (auto part : parts)
+    {
+        int idx = parse_integer(part, "slot 编号");
+        if (idx < 1 || idx > MAX_MESSAGES)
+            throw std::invalid_argument("slot 编号必须在 1..8 之间");
+        indices.push_back(static_cast<std::size_t>(idx - 1));
+    }
+    return indices;
+}
+
 auto parse_options(int argc, char **argv) -> Options
 {
     enum OptionCode : uint16_t
@@ -144,8 +182,10 @@ auto parse_options(int argc, char **argv) -> Options
         option{.name = "mode", .has_arg = required_argument, .flag = nullptr, .val = mode},
         option{
             .name = "brightness", .has_arg = required_argument, .flag = nullptr, .val = brightness},
-        option{.name = "blink", .has_arg = no_argument, .flag = nullptr, .val = blink},
-        option{.name = "border", .has_arg = no_argument, .flag = nullptr, .val = border},
+        option{
+            .name = "blink", .has_arg = required_argument, .flag = nullptr, .val = blink},
+        option{
+            .name = "border", .has_arg = required_argument, .flag = nullptr, .val = border},
         option{.name = "help", .has_arg = no_argument, .flag = nullptr, .val = 'h'},
         option{.name = nullptr, .has_arg = 0, .flag = nullptr, .val = 0},
     };
@@ -189,20 +229,44 @@ auto parse_options(int argc, char **argv) -> Options
         case threshold:
             result.threshold = parse_integer(optarg, "threshold");
             break;
-        case speed:
-            result.display.speed = parse_integer(optarg, "speed");
+        case speed: {
+            auto parts = split_values(optarg);
+            if (parts.size() == 1)
+            {
+                int s = parse_integer(parts[0], "speed");
+                for (auto &slot : result.display.slots) slot.speed = s;
+            }
+            else
+            {
+                for (std::size_t i = 0; i < parts.size() && i < MAX_MESSAGES; ++i)
+                    result.display.slots[i].speed = parse_integer(parts[i], "speed");
+            }
             break;
-        case mode:
-            result.display.mode = parse_mode(optarg);
+        }
+        case mode: {
+            auto parts = split_values(optarg);
+            if (parts.size() == 1)
+            {
+                DisplayMode m = parse_mode(parts[0]);
+                for (auto &slot : result.display.slots) slot.mode = m;
+            }
+            else
+            {
+                for (std::size_t i = 0; i < parts.size() && i < MAX_MESSAGES; ++i)
+                    result.display.slots[i].mode = parse_mode(parts[i]);
+            }
             break;
+        }
         case brightness:
             result.display.brightness = parse_integer(optarg, "brightness");
             break;
         case blink:
-            result.display.blink = true;
+            for (auto idx : parse_slot_indices(optarg))
+                result.display.slots[idx].blink = true;
             break;
         case border:
-            result.display.border = true;
+            for (auto idx : parse_slot_indices(optarg))
+                result.display.slots[idx].border = true;
             break;
         case 'h':
             result.show_help = true;
