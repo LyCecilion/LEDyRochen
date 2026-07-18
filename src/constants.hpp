@@ -12,6 +12,7 @@ constexpr int BRIGHTNESS_DIV = 127; // vendor / pack_image binary threshold
 constexpr int STB_THRESHOLD = 96;   // stb_truetype grayscale → binary threshold
 constexpr int BRIGHT = 255;
 constexpr int DARK = 0;
+constexpr int MAX_MESSAGES = 8;
 
 // ── vendor font metrics ──
 constexpr int ASCII_GLYPH_WIDTH = 8;                     // ASC11 glyph width
@@ -19,12 +20,14 @@ constexpr int GBK_GLYPH_WIDTH = 11;                      // HZK11 glyph width (u
 constexpr int GBK_STORAGE_WIDTH = 16;                    // HZK11 glyph width (stored)
 constexpr int GBK_BYTES_PER_ROW = 2;                     // HZK11: 16-bit rows → 2 bytes
 constexpr int GBK_GLYPH_SIZE = ROWS * GBK_BYTES_PER_ROW; // 22 bytes per GBK glyph
+constexpr int ASCII_FONT_SIZE = 256 * ROWS;
 
 // ── GBK codec ──
 constexpr int GBK_LEAD_MIN = 0x81;   // first lead byte in HZK11
 constexpr int GBK_TRAIL_MIN = 0x40;  // first trail byte in HZK11
 constexpr int GBK_TRAIL_COUNT = 191; // trail slots per lead byte
-constexpr uint8_t ASCII_MAX = 0x7F;  // bytes ≤ this are ASCII, > are GBK
+constexpr int GBK_SLOT_COUNT = 126 * GBK_TRAIL_COUNT;
+constexpr int GBK_FONT_SIZE = GBK_SLOT_COUNT * GBK_GLYPH_SIZE;
 
 constexpr std::array<uint8_t, 64> HEADER_TEMPLATE = {
     0x77, 0x61, 0x6E, 0x67, 0x00, 0x00, 0x00, 0x00, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40,

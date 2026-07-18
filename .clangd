@@ -1,28 +1,6 @@
 CompileFlags:
   CompilationDatabase: build
 
-Diagnostics:
-  ClangTidy:
-    Add:
-      - bugprone-*
-      - cert-*
-      - clang-analyzer-*
-      - clang-diagnostic-*
-      - concurrency-*
-      - misc-*
-      - modernize-*
-      - performance-*
-      - readability-*
-    Remove:
-      - readability-braces-around-statements
-      - readability-isolate-declaration
-      - misc-non-private-member-variables-in-classes
-      - bugprone-easily-swappable-parameters
-      - readability-*-length
-    CheckOptions:
-      readability-function-cognitive-complexity.Threshold: 40
-
-
 Index:
   Background: Build
 

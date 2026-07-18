@@ -1,12 +1,23 @@
 #include "pack.hpp"
 #include "constants.hpp"
 
-auto pack_image(const std::vector<uint8_t> &pixels, int width) -> std::vector<uint8_t>
-{
-    if (pixels.size() / width != ROWS) return {};
+#include <stdexcept>
 
-    int columns = (width + COLUMN_WIDTH - 1) / COLUMN_WIDTH;
+auto pack_image(std::span<const uint8_t> pixels, int width) -> std::vector<uint8_t>
+{
+    if (width <= 0)
+    {
+        throw std::invalid_argument("点阵宽度必须大于 0");
+    }
+    const auto unsigned_width = static_cast<std::size_t>(width);
+    if (pixels.size() != unsigned_width * static_cast<std::size_t>(ROWS))
+    {
+        throw std::invalid_argument("点阵数据长度与尺寸不匹配");
+    }
+
+    const int columns = (width + COLUMN_WIDTH - 1) / COLUMN_WIDTH;
     std::vector<uint8_t> packed;
+    packed.reserve(static_cast<std::size_t>(columns) * static_cast<std::size_t>(ROWS));
 
     for (int col = 0; col < columns; col++)
     {
@@ -16,10 +27,15 @@ auto pack_image(const std::vector<uint8_t> &pixels, int width) -> std::vector<ui
             for (int bit = 0; bit < COLUMN_WIDTH; bit++)
             {
                 int x = (col * COLUMN_WIDTH) + bit;
-                if (x >= width) break;
-                if (pixels[(row * width) + x] > BRIGHTNESS_DIV)
+                if (x >= width)
                 {
-                    value |= 1U << (COLUMN_WIDTH - 1U - bit);
+                    break;
+                }
+                const auto pixel_index =
+                    (static_cast<std::size_t>(row) * unsigned_width) + static_cast<std::size_t>(x);
+                if (pixels[pixel_index] > BRIGHTNESS_DIV)
+                {
+                    value |= static_cast<uint8_t>(1U << (COLUMN_WIDTH - 1 - bit));
                 }
             }
             packed.push_back(value);

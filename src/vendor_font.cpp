@@ -3,14 +3,65 @@
 #include "constants.hpp"
 #include "utils.hpp"
 
-auto load_vendor_font(const std::string &dir) -> VendorFont
+namespace
 {
-    return {.ascii = read_file(dir + "/ASC11"), .gbk = read_file(dir + "/HZK11")};
+auto require_font_size(std::string_view name, std::size_t actual, std::size_t expected) -> void
+{
+    if (actual != expected)
+    {
+        throw std::runtime_error(std::string(name) + " 大小异常：" + std::to_string(actual) +
+                                 "，应为 " + std::to_string(expected));
+    }
+}
+} // namespace
+
+auto load_vendor_font(const std::filesystem::path &directory) -> VendorFont
+{
+    VendorFont font{.ascii = read_file((directory / "ASC11").string()),
+                    .gbk = read_file((directory / "HZK11").string())};
+    require_font_size("ASC11", font.ascii.size(), ASCII_FONT_SIZE);
+    require_font_size("HZK11", font.gbk.size(), GBK_FONT_SIZE);
+    return font;
 }
 
-auto render_vendor(const std::string &text, const VendorFont &vf) -> GlyphBitmap
+auto find_vendor_font_dir(const std::filesystem::path &explicit_directory) -> std::filesystem::path
 {
-    auto gbk_bytes = utf8_to_gbk(text);
+    std::vector<std::filesystem::path> candidates;
+    if (!explicit_directory.empty())
+    {
+        candidates.push_back(explicit_directory);
+    }
+    candidates.push_back(std::filesystem::current_path() / "vendor");
+
+    for (const auto &directory : candidates)
+    {
+        if (std::filesystem::is_regular_file(directory / "ASC11") &&
+            std::filesystem::is_regular_file(directory / "HZK11"))
+        {
+            return directory;
+        }
+    }
+    return {};
+}
+
+auto render_vendor(const std::string &text, const VendorFont &font) -> GlyphBitmap
+{
+    if (text.empty())
+    {
+        throw std::invalid_argument("消息不能为空");
+    }
+    require_font_size("ASC11", font.ascii.size(), ASCII_FONT_SIZE);
+    require_font_size("HZK11", font.gbk.size(), GBK_FONT_SIZE);
+
+    std::vector<uint8_t> gbk_bytes;
+    try
+    {
+        gbk_bytes = utf8_to_gbk(text);
+    }
+    catch (const EncodingError &error)
+    {
+        throw UnsupportedVendorGlyph(error.what());
+    }
 
     // First pass: compute total pixel width
     int total_width = 0;
@@ -18,23 +69,31 @@ auto render_vendor(const std::string &text, const VendorFont &vf) -> GlyphBitmap
     while (i < gbk_bytes.size())
     {
         uint8_t byte0 = gbk_bytes[i++];
-        total_width += (byte0 <= ASCII_MAX) ? ASCII_GLYPH_WIDTH : GBK_GLYPH_WIDTH;
-        if (byte0 > ASCII_MAX) i++;
+        total_width += (byte0 < GBK_LEAD_MIN) ? ASCII_GLYPH_WIDTH : GBK_GLYPH_WIDTH;
+        if (byte0 >= GBK_LEAD_MIN)
+        {
+            if (i >= gbk_bytes.size())
+            {
+                throw UnsupportedVendorGlyph("残缺的 GBK 字符");
+            }
+            ++i;
+        }
     }
 
     // Second pass: render into pixel buffer
-    std::vector<uint8_t> pixels(static_cast<size_t>(total_width * ROWS), 0);
+    const auto pixel_count = static_cast<std::size_t>(total_width) * static_cast<std::size_t>(ROWS);
+    std::vector<uint8_t> pixels(pixel_count, DARK);
     int cursor = 0;
     i = 0;
     while (i < gbk_bytes.size())
     {
         uint8_t byte0 = gbk_bytes[i++];
-        if (byte0 <= ASCII_MAX)
+        if (byte0 < GBK_LEAD_MIN)
         { // ASCII glyph
-            int offset = byte0 * ROWS;
+            const auto offset = static_cast<std::size_t>(byte0) * static_cast<std::size_t>(ROWS);
             for (int row = 0; row < ROWS; row++)
             {
-                uint8_t row_data = vf.ascii[offset + row];
+                uint8_t row_data = font.ascii[offset + static_cast<std::size_t>(row)];
                 for (int x = 0; x < ASCII_GLYPH_WIDTH; x++)
                 {
                     pixels[(row * total_width) + cursor + x] =
@@ -46,15 +105,25 @@ auto render_vendor(const std::string &text, const VendorFont &vf) -> GlyphBitmap
         else
         { // GBK: 11 columns
             uint8_t lead = byte0;
+            if (i >= gbk_bytes.size())
+            {
+                throw UnsupportedVendorGlyph("残缺的 GBK 字符");
+            }
             uint8_t trail = gbk_bytes[i++];
-            int index = ((lead - GBK_LEAD_MIN) * GBK_TRAIL_COUNT) + (trail - GBK_TRAIL_MIN);
-            int offset = index * GBK_GLYPH_SIZE;
+            if (lead < GBK_LEAD_MIN || lead > 0xFE || trail < GBK_TRAIL_MIN || trail > 0xFE)
+            {
+                throw UnsupportedVendorGlyph("GBK 编码超出原版 HZK11 范围");
+            }
+            const auto index = (static_cast<std::size_t>(lead - GBK_LEAD_MIN) *
+                                static_cast<std::size_t>(GBK_TRAIL_COUNT)) +
+                               static_cast<std::size_t>(trail - GBK_TRAIL_MIN);
+            const auto offset = index * static_cast<std::size_t>(GBK_GLYPH_SIZE);
             for (int row = 0; row < ROWS; row++)
             {
+                const auto row_offset = offset + (static_cast<std::size_t>(row) *
+                                                  static_cast<std::size_t>(GBK_BYTES_PER_ROW));
                 auto row_data = static_cast<uint16_t>(
-                    (static_cast<uint16_t>(vf.gbk[offset + (row * GBK_BYTES_PER_ROW)])
-                     << 8) | // NOLINT(readability-magic-numbers), why warn me here??
-                    vf.gbk[offset + (row * GBK_BYTES_PER_ROW) + 1]);
+                    (static_cast<uint16_t>(font.gbk[row_offset]) << 8) | font.gbk[row_offset + 1]);
                 for (int x = 0; x < GBK_GLYPH_WIDTH; x++)
                 {
                     pixels[(row * total_width) + cursor + x] =
@@ -64,5 +133,5 @@ auto render_vendor(const std::string &text, const VendorFont &vf) -> GlyphBitmap
             cursor += GBK_GLYPH_WIDTH;
         }
     }
-    return {.pixels = pixels, .width = total_width};
+    return {.pixels = std::move(pixels), .width = total_width};
 }

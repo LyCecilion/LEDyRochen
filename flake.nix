@@ -15,7 +15,7 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
-      formatter = forAllSystems (system: nixpkgs.nixfmt);
+      formatter = forAllSystems (system: (import nixpkgs { inherit system; }).nixfmt);
       devShells = forAllSystems (
         system:
         let
