@@ -16,6 +16,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
+FetchContent_Declare(
+  cli11
+  URL https://github.com/CLIUtils/CLI11/releases/download/v2.6.2/CLI11.hpp
+  DOWNLOAD_NO_EXTRACT TRUE
+  DOWNLOAD_NAME CLI11.hpp
+)
+FetchContent_MakeAvailable(cli11)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
 
@@ -37,6 +45,7 @@ set_target_properties(ledyrochen_core PROPERTIES CXX_EXTENSIONS OFF)
 
 add_executable(ledyrochen src/main.cpp)
 target_link_libraries(ledyrochen PRIVATE ledyrochen_core)
+target_include_directories(ledyrochen SYSTEM PRIVATE ${cli11_SOURCE_DIR})
 set_target_properties(ledyrochen PROPERTIES CXX_EXTENSIONS OFF)
 
 function(ledyrochen_enable_warnings target)
