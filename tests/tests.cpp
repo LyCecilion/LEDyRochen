@@ -42,13 +42,15 @@ auto test_pack_image() -> void
     pixels[0] = BRIGHT;
     pixels.back() = BRIGHT;
     const auto packed = pack_image(pixels, 8);
-    require(packed.size() == ROWS, "8 像素宽点阵应编码为 11 字节");
-    require(packed.front() == 0x80, "左上像素应是最高位");
-    require(packed.back() == 0x01, "右下像素应是最低位");
+    require(packed.size() == ROWS, "8-pixel wide bitmap should encode to 11 bytes");
+    require(packed.front() == 0x80, "top-left pixel should be the most significant bit");
+    require(packed.back() == 0x01, "bottom-right pixel should be the least significant bit");
 
-    require_throws<std::invalid_argument>([]() -> void { pack_image({}, 0); }, "width=0 应被拒绝");
-    require_throws<std::invalid_argument>(
-        []() -> void { pack_image(std::array<uint8_t, 23>{}, 2); }, "多余像素数据应被拒绝");
+    require_throws<std::invalid_argument>([]() -> void { pack_image({}, 0); },
+                                          "width=0 should be rejected");
+    require_throws<std::invalid_argument>([]() -> void
+                                          { pack_image(std::array<uint8_t, 23>{}, 2); },
+                                          "excess pixel data should be rejected");
 }
 
 auto test_header_and_payload() -> void
@@ -64,27 +66,27 @@ auto test_header_and_payload() -> void
     const std::array<uint16_t, 1> lengths{3};
     const auto header = build_header(lengths, settings, timestamp);
     require(std::string_view(reinterpret_cast<const char *>(header.data()), 4) == "wang",
-            "header magic 错误");
-    require(header[5] == 0x20 && header[6] == 1 && header[7] == 1, "header 开关错误");
-    require(header[8] == 0x32 && header[16] == 0 && header[17] == 3, "header 设置错误");
-    require(header[38] == 26 && header[43] == 1, "header 时间戳错误");
+            "header magic error");
+    require(header[5] == 0x20 && header[6] == 1 && header[7] == 1, "header flag error");
+    require(header[8] == 0x32 && header[16] == 0 && header[17] == 3, "header settings error");
+    require(header[38] == 26 && header[43] == 1, "header timestamp error");
 
     GlyphBitmap image{.pixels = std::vector<uint8_t>(static_cast<std::size_t>(ROWS * 9), DARK),
                       .width = 9};
     const std::array images{image};
     const auto payload = build_payload(images, {}, timestamp);
-    require(payload.size() % REPORT_SIZE == 0, "payload 未补齐为 64 字节");
-    require(payload.size() == 128, "9 像素点阵 payload 应为 128 字节");
+    require(payload.size() % REPORT_SIZE == 0, "payload not padded to 64 bytes");
+    require(payload.size() == 128, "9-pixel bitmap payload should be 128 bytes");
 }
 
 auto test_utf8_validation() -> void
 {
     const auto codepoints = utf8_codepoints("A洛🙂");
-    require(codepoints.size() == 3, "UTF-8 解码数量错误");
+    require(codepoints.size() == 3, "UTF-8 decode count error");
     require_throws<EncodingError>([]() -> void { utf8_codepoints("\xE6\xB4"); },
-                                  "截断 UTF-8 应被拒绝");
+                                  "truncated UTF-8 should be rejected");
     require_throws<EncodingError>([]() -> void { utf8_codepoints("\xC0\x80"); },
-                                  "过长 UTF-8 应被拒绝");
+                                  "overlong UTF-8 should be rejected");
 }
 
 auto test_vendor_font() -> void
@@ -94,7 +96,7 @@ auto test_vendor_font() -> void
     font.ascii[static_cast<std::size_t>('A') * ROWS] = 0x81;
     const auto ascii = render_vendor("A", font);
     require(ascii.width == 8 && ascii.pixels[0] == BRIGHT && ascii.pixels[7] == BRIGHT,
-            "ASCII 字形解码错误");
+            "ASCII glyph decode error");
 
     const auto encoded = utf8_to_gbk("洛");
     const auto index = (static_cast<std::size_t>(encoded[0] - GBK_LEAD_MIN) *
@@ -105,9 +107,10 @@ auto test_vendor_font() -> void
     font.gbk[offset + 1] = 0x20;
     const auto gbk = render_vendor("洛", font);
     require(gbk.width == 11 && gbk.pixels[0] == BRIGHT && gbk.pixels[10] == BRIGHT,
-            "GBK 字形解码错误");
-    require(render_vendor("A洛", font).width == 19, "混合字形宽度错误");
-    require(render_vendor("拓展天空", font).width == 44, "四个 GBK 字符应填满 44 列");
+            "GBK glyph decode error");
+    require(render_vendor("A洛", font).width == 19, "mixed glyph width error");
+    require(render_vendor("拓展天空", font).width == 44,
+            "four GBK characters should fill 44 columns");
 }
 } // namespace
 
@@ -119,12 +122,12 @@ auto main() -> int
         test_header_and_payload();
         test_utf8_validation();
         test_vendor_font();
-        std::cout << "全部测试通过\n";
+        std::cout << "all tests passed\n";
         return 0;
     }
     catch (const std::exception &error)
     {
-        std::cerr << "测试失败：" << error.what() << '\n';
+        std::cerr << "test failed: " << error.what() << '\n';
         return 1;
     }
 }

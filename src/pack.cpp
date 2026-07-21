@@ -7,12 +7,12 @@ auto pack_image(std::span<const uint8_t> pixels, int width) -> std::vector<uint8
 {
     if (width <= 0)
     {
-        throw std::invalid_argument("点阵宽度必须大于 0");
+        throw std::invalid_argument("bitmap width must be greater than 0");
     }
     const auto unsigned_width = static_cast<std::size_t>(width);
     if (pixels.size() != unsigned_width * static_cast<std::size_t>(ROWS))
     {
-        throw std::invalid_argument("点阵数据长度与尺寸不匹配");
+        throw std::invalid_argument("bitmap data length does not match dimensions");
     }
 
     const int columns = (width + COLUMN_WIDTH - 1) / COLUMN_WIDTH;

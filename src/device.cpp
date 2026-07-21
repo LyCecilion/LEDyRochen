@@ -30,7 +30,7 @@ using ConfigDescriptor = std::unique_ptr<libusb_config_descriptor, ConfigDeleter
 
 [[noreturn]] auto throw_usb_error(std::string_view operation, int error) -> void
 {
-    throw std::runtime_error(std::string(operation) + "：" + libusb_error_name(error));
+    throw std::runtime_error(std::string(operation) + ": " + libusb_error_name(error));
 }
 
 auto read_string(libusb_device_handle *handle, uint8_t descriptor_index) -> std::string
@@ -89,7 +89,7 @@ auto find_endpoints(const libusb_config_descriptor &config) -> EndpointSelection
             }
         }
     }
-    throw std::runtime_error("设备没有可用的 interrupt IN/OUT endpoint");
+    throw std::runtime_error("device has no usable interrupt IN/OUT endpoint");
 }
 } // namespace
 
@@ -131,7 +131,7 @@ auto BadgeDevice::find_all() -> std::vector<BadgeDevice>
     const int init_result = libusb_init(&raw_context);
     if (init_result < 0)
     {
-        throw_usb_error("初始化 libusb 失败", init_result);
+        throw_usb_error("libusb init failed", init_result);
     }
     auto context = std::shared_ptr<libusb_context>(raw_context, libusb_exit);
 
@@ -139,7 +139,7 @@ auto BadgeDevice::find_all() -> std::vector<BadgeDevice>
     const ssize_t count = libusb_get_device_list(context.get(), &raw_devices);
     if (count < 0)
     {
-        throw_usb_error("枚举 USB 设备失败", static_cast<int>(count));
+        throw_usb_error("USB device enumeration failed", static_cast<int>(count));
     }
     DeviceList devices(raw_devices);
     std::vector<BadgeDevice> result;
@@ -151,7 +151,7 @@ auto BadgeDevice::find_all() -> std::vector<BadgeDevice>
         const int descriptor_result = libusb_get_device_descriptor(device, &descriptor);
         if (descriptor_result < 0)
         {
-            throw_usb_error("读取 USB 设备描述符失败", descriptor_result);
+            throw_usb_error("failed to read USB device descriptor", descriptor_result);
         }
         if (descriptor.idVendor != VID || descriptor.idProduct != PID)
         {
@@ -162,7 +162,7 @@ auto BadgeDevice::find_all() -> std::vector<BadgeDevice>
         const int open_result = libusb_open(device, &handle);
         if (open_result < 0)
         {
-            throw_usb_error("打开 0416:5020 设备失败（请检查 udev 规则）", open_result);
+            throw_usb_error("failed to open 0416:5020 device (check udev rules)", open_result);
         }
         std::unique_ptr<libusb_device_handle, decltype(&libusb_close)> handle_guard(handle,
                                                                                     libusb_close);
@@ -179,13 +179,13 @@ auto BadgeDevice::find_all() -> std::vector<BadgeDevice>
                 if (set_result < 0 && set_result != LIBUSB_ERROR_BUSY)
                 {
                     libusb_free_config_descriptor(raw_config);
-                    throw_usb_error("设置 USB configuration 失败", set_result);
+                    throw_usb_error("failed to set USB configuration", set_result);
                 }
             }
         }
         if (config_result < 0)
         {
-            throw_usb_error("读取 USB configuration 失败", config_result);
+            throw_usb_error("failed to read USB configuration", config_result);
         }
         ConfigDescriptor config(raw_config);
         const EndpointSelection endpoints = find_endpoints(*config);
@@ -193,12 +193,12 @@ auto BadgeDevice::find_all() -> std::vector<BadgeDevice>
         const int detach_result = libusb_set_auto_detach_kernel_driver(handle, 1);
         if (detach_result < 0 && detach_result != LIBUSB_ERROR_NOT_SUPPORTED)
         {
-            throw_usb_error("设置 kernel driver 自动分离失败", detach_result);
+            throw_usb_error("failed to set kernel driver auto-detach", detach_result);
         }
         const int claim_result = libusb_claim_interface(handle, endpoints.interface_number);
         if (claim_result < 0)
         {
-            throw_usb_error("占用 USB interface 失败", claim_result);
+            throw_usb_error("failed to claim USB interface", claim_result);
         }
 
         std::string manufacturer = read_string(handle, descriptor.iManufacturer);
@@ -229,19 +229,19 @@ auto BadgeDevice::write(std::span<const uint8_t> payload, std::chrono::milliseco
 {
     if (handle_ == nullptr)
     {
-        throw std::logic_error("USB 设备已经关闭");
+        throw std::logic_error("USB device already closed");
     }
     if (payload.empty() || payload.size() % REPORT_SIZE != 0)
     {
-        throw std::invalid_argument("payload 长度必须是 64 的非零倍数");
+        throw std::invalid_argument("payload length must be a non-zero multiple of 64");
     }
     if (payload.size() > MAX_PAYLOAD)
     {
-        throw std::invalid_argument("payload 超过设备安全上限");
+        throw std::invalid_argument("payload exceeds device safety limit");
     }
     if (delay.count() < 0)
     {
-        throw std::invalid_argument("USB 报告间隔不能为负数");
+        throw std::invalid_argument("USB report interval cannot be negative");
     }
 
     for (std::size_t offset = 0; offset < payload.size(); offset += REPORT_SIZE)
@@ -254,12 +254,12 @@ auto BadgeDevice::write(std::span<const uint8_t> payload, std::chrono::milliseco
                                                            REPORT_SIZE, &written, timeout);
         if (write_result < 0)
         {
-            throw_usb_error("USB 写入失败", write_result);
+            throw_usb_error("USB write failed", write_result);
         }
         if (written != REPORT_SIZE)
         {
-            throw std::runtime_error("USB 只写入了 " + std::to_string(written) + "/" +
-                                     std::to_string(REPORT_SIZE) + " 字节");
+            throw std::runtime_error("USB wrote only " + std::to_string(written) + "/" +
+                                     std::to_string(REPORT_SIZE) + " bytes");
         }
 
         std::array<unsigned char, REPORT_SIZE> acknowledgement{};
@@ -268,12 +268,12 @@ auto BadgeDevice::write(std::span<const uint8_t> payload, std::chrono::milliseco
             handle_, endpoint_in_, acknowledgement.data(), REPORT_SIZE, &received, timeout);
         if (read_result < 0)
         {
-            throw_usb_error("读取 CH546 确认包失败", read_result);
+            throw_usb_error("failed to read CH546 acknowledgement", read_result);
         }
         if (received != REPORT_SIZE)
         {
-            throw std::runtime_error("CH546 确认包长度异常：" + std::to_string(received) + "/" +
-                                     std::to_string(REPORT_SIZE));
+            throw std::runtime_error("CH546 acknowledgement length mismatch: " +
+                                     std::to_string(received) + "/" + std::to_string(REPORT_SIZE));
         }
     }
 }

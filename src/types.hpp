@@ -15,7 +15,7 @@ struct GlyphBitmap
     {
         if (width <= 0)
         {
-            throw std::invalid_argument("点阵宽度必须大于 0");
+            throw std::invalid_argument("bitmap width must be greater than 0");
         }
         return static_cast<std::size_t>(width) * static_cast<std::size_t>(ROWS);
     }
@@ -24,7 +24,7 @@ struct GlyphBitmap
     {
         if (pixels.size() != pixel_count())
         {
-            throw std::invalid_argument("点阵数据长度与尺寸不匹配");
+            throw std::invalid_argument("bitmap data length does not match dimensions");
         }
     }
 };

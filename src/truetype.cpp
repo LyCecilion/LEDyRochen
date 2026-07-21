@@ -84,7 +84,7 @@ auto find_font(const std::filesystem::path &explicit_path) -> std::filesystem::p
     {
         if (!std::filesystem::is_regular_file(explicit_path))
         {
-            throw std::runtime_error("字体不存在：" + explicit_path.string());
+            throw std::runtime_error("font not found: " + explicit_path.string());
         }
         return explicit_path;
     }
@@ -103,7 +103,7 @@ auto find_font(const std::filesystem::path &explicit_path) -> std::filesystem::p
     {
         return *match;
     }
-    throw std::runtime_error("找不到支持中文的字体；请用 --font 指定 TTF/TTC 文件");
+    throw std::runtime_error("no CJK-capable font found; use --font to specify a TTF/TTC file");
 }
 
 auto render_text(const std::string &text, const std::string &font_path, int font_size,
@@ -111,15 +111,15 @@ auto render_text(const std::string &text, const std::string &font_path, int font
 {
     if (text.empty())
     {
-        throw std::invalid_argument("消息不能为空");
+        throw std::invalid_argument("message must not be empty");
     }
     if (font_size <= MIN_FONT_SIZE)
     {
-        throw std::invalid_argument("font-size 必须大于 5");
+        throw std::invalid_argument("font-size must be greater than 5");
     }
     if (threshold < 0 || threshold > 255)
     {
-        throw std::invalid_argument("threshold 必须在 0..255 之间");
+        throw std::invalid_argument("threshold must be between 0..255");
     }
     const auto binary_threshold = static_cast<uint8_t>(threshold);
 
@@ -127,18 +127,18 @@ auto render_text(const std::string &text, const std::string &font_path, int font
     const std::vector<uint8_t> font_data = read_file(font_path);
     if (font_data.empty())
     {
-        throw std::runtime_error("字体文件为空：" + font_path);
+        throw std::runtime_error("font file is empty: " + font_path);
     }
 
     const int font_offset = stbtt_GetFontOffsetForIndex(font_data.data(), 0);
     if (font_offset < 0)
     {
-        throw std::runtime_error("不是有效的 TTF/TTC 字体：" + font_path);
+        throw std::runtime_error("not a valid TTF/TTC font: " + font_path);
     }
     stbtt_fontinfo font{};
     if (stbtt_InitFont(&font, font_data.data(), font_offset) == 0)
     {
-        throw std::runtime_error("无法初始化字体：" + font_path);
+        throw std::runtime_error("failed to initialize font: " + font_path);
     }
 
     std::optional<TextMetrics> metrics;
@@ -153,7 +153,8 @@ auto render_text(const std::string &text, const std::string &font_path, int font
     }
     if (!metrics)
     {
-        throw std::runtime_error("文字无法缩放到 " + std::to_string(ROWS) + " 像素高");
+        throw std::runtime_error("text cannot fit within " + std::to_string(ROWS) +
+                                 " pixel height");
     }
 
     const auto width = static_cast<std::size_t>(metrics->width);

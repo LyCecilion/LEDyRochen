@@ -9,8 +9,8 @@ auto require_font_size(std::string_view name, std::size_t actual, std::size_t ex
 {
     if (actual != expected)
     {
-        throw std::runtime_error(std::string(name) + " 大小异常：" + std::to_string(actual) +
-                                 "，应为 " + std::to_string(expected));
+        throw std::runtime_error(std::string(name) + " has unexpected size: " +
+                                 std::to_string(actual) + ", expected " + std::to_string(expected));
     }
 }
 } // namespace
@@ -48,7 +48,7 @@ auto render_vendor(const std::string &text, const VendorFont &font) -> GlyphBitm
 {
     if (text.empty())
     {
-        throw std::invalid_argument("消息不能为空");
+        throw std::invalid_argument("message must not be empty");
     }
     require_font_size("ASC11", font.ascii.size(), ASCII_FONT_SIZE);
     require_font_size("HZK11", font.gbk.size(), GBK_FONT_SIZE);
@@ -74,7 +74,7 @@ auto render_vendor(const std::string &text, const VendorFont &font) -> GlyphBitm
         {
             if (i >= gbk_bytes.size())
             {
-                throw UnsupportedVendorGlyph("残缺的 GBK 字符");
+                throw UnsupportedVendorGlyph("truncated GBK character");
             }
             ++i;
         }
@@ -107,12 +107,12 @@ auto render_vendor(const std::string &text, const VendorFont &font) -> GlyphBitm
             uint8_t lead = byte0;
             if (i >= gbk_bytes.size())
             {
-                throw UnsupportedVendorGlyph("残缺的 GBK 字符");
+                throw UnsupportedVendorGlyph("truncated GBK character");
             }
             uint8_t trail = gbk_bytes[i++];
             if (lead < GBK_LEAD_MIN || lead > 0xFE || trail < GBK_TRAIL_MIN || trail > 0xFE)
             {
-                throw UnsupportedVendorGlyph("GBK 编码超出原版 HZK11 范围");
+                throw UnsupportedVendorGlyph("GBK encoding exceeds HZK11 range");
             }
             const auto index = (static_cast<std::size_t>(lead - GBK_LEAD_MIN) *
                                 static_cast<std::size_t>(GBK_TRAIL_COUNT)) +

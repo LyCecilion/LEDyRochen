@@ -17,18 +17,20 @@ auto validate_settings(const DisplaySettings &settings) -> void
         const auto &slot = settings.slots[i];
         if (slot.speed < 1 || slot.speed > 8)
         {
-            throw std::invalid_argument("slot " + std::to_string(i) + " 的 speed 必须在 1..8 之间");
+            throw std::invalid_argument("speed of slot " + std::to_string(i) +
+                                        " must be between 1..8");
         }
         const int mode = static_cast<int>(slot.mode);
         if (mode < 0 || mode > 8)
         {
-            throw std::invalid_argument("slot " + std::to_string(i) + " 的 mode 必须在 0..8 之间");
+            throw std::invalid_argument("speed of slot " + std::to_string(i) +
+                                        " must be between 0..8");
         }
     }
     if (settings.brightness != 25 && settings.brightness != 50 && settings.brightness != 75 &&
         settings.brightness != 100)
     {
-        throw std::invalid_argument("brightness 必须为 25、50、75 或 100");
+        throw std::invalid_argument("brightness must be 25, 50, 75 or 100");
     }
 }
 
@@ -45,7 +47,7 @@ auto brightness_code(int brightness) -> uint8_t
     case 100:
         return 0x00;
     default:
-        throw std::invalid_argument("无效亮度");
+        throw std::invalid_argument("invalid brightness");
     }
 }
 } // namespace
@@ -56,7 +58,7 @@ auto current_timestamp() -> ProtocolTimestamp
     std::tm local{};
     if (localtime_r(&now, &local) == nullptr)
     {
-        throw std::runtime_error("无法获取本地时间");
+        throw std::runtime_error("failed to get local time");
     }
     return {.year = local.tm_year + 1900,
             .month = local.tm_mon + 1,
@@ -71,18 +73,18 @@ auto build_header(std::span<const uint16_t> lengths, const DisplaySettings &sett
 {
     if (lengths.empty() || lengths.size() > MAX_MESSAGES)
     {
-        throw std::invalid_argument("必须提供 1..8 条消息");
+        throw std::invalid_argument("must provide 1..8 messages");
     }
     if (std::ranges::any_of(lengths, [](uint16_t length) -> bool { return length == 0; }))
     {
-        throw std::invalid_argument("消息点阵长度超出协议范围");
+        throw std::invalid_argument("message bitmap length exceeds protocol limit");
     }
     validate_settings(settings);
     if (timestamp.month < 1 || timestamp.month > 12 || timestamp.day < 1 || timestamp.day > 31 ||
         timestamp.hour < 0 || timestamp.hour > 23 || timestamp.minute < 0 ||
         timestamp.minute > 59 || timestamp.second < 0 || timestamp.second > 59)
     {
-        throw std::invalid_argument("协议时间戳超出有效范围");
+        throw std::invalid_argument("protocol timestamp out of valid range");
     }
 
     auto header = HEADER_TEMPLATE;
@@ -99,8 +101,7 @@ auto build_header(std::span<const uint16_t> lengths, const DisplaySettings &sett
     for (std::size_t i = 0; i < MAX_MESSAGES; ++i)
     {
         const auto &slot = settings.slots[i];
-        header[8 + i] =
-            static_cast<uint8_t>((16 * (slot.speed - 1)) + static_cast<int>(slot.mode));
+        header[8 + i] = static_cast<uint8_t>((16 * (slot.speed - 1)) + static_cast<int>(slot.mode));
     }
     for (std::size_t index = 0; index < lengths.size(); ++index)
     {
@@ -122,7 +123,7 @@ auto build_payload(std::span<const GlyphBitmap> images, const DisplaySettings &s
 {
     if (images.empty() || images.size() > MAX_MESSAGES)
     {
-        throw std::invalid_argument("必须提供 1..8 条消息");
+        throw std::invalid_argument("must provide 1..8 messages");
     }
 
     std::vector<std::vector<uint8_t>> packed_images;
@@ -136,7 +137,7 @@ auto build_payload(std::span<const GlyphBitmap> images, const DisplaySettings &s
         const std::size_t columns = packed.size() / static_cast<std::size_t>(ROWS);
         if (columns == 0 || columns > std::numeric_limits<uint16_t>::max())
         {
-            throw std::invalid_argument("消息点阵长度超出协议范围");
+            throw std::invalid_argument("message bitmap length exceeds protocol limit");
         }
         lengths.push_back(static_cast<uint16_t>(columns));
         packed_images.push_back(std::move(packed));
@@ -152,9 +153,9 @@ auto build_payload(std::span<const GlyphBitmap> images, const DisplaySettings &s
     payload.resize(payload.size() + padding, 0);
     if (payload.size() > MAX_PAYLOAD)
     {
-        throw std::invalid_argument("编码后为 " + std::to_string(payload.size()) +
-                                    " 字节，超过设备安全上限 " + std::to_string(MAX_PAYLOAD) +
-                                    " 字节");
+        throw std::invalid_argument("encoded payload is " + std::to_string(payload.size()) +
+                                    " bytes, exceeding device safety limit of " +
+                                    std::to_string(MAX_PAYLOAD) + " bytes");
     }
     return payload;
 }
