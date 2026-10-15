@@ -1,6 +1,6 @@
 # LEDyRochen
 
-Fedora/Linux 原生的 `0416:5020 / wch.cn CH546` 11×44 LED 显示屏写入工具，presented by Limity'roChen and LyCecilion。
+Fedora/Linux 原生的 `0416:5020 / wch.cn CH546` 11×44 LED 显示屏写入工具，presented by LYCN and LyCecilion。
 
 > To the ages long past, I bid my most devout farewell, even as the world doth bid farewell to me.
 
@@ -50,13 +50,13 @@ sudo udevadm control --reload-rules
 预览并只编码、不写入：
 
 ```console
-./build/ledyrochen --vendor-font-dir ../RocheLCD/vendor --preview --dry-run "洛汐"
+./build/ledyrochen --vendor-font-dir ../RocheLCD/vendor --preview --dry-run "零音"
 ```
 
 写入一至八条循环消息：
 
 ```console
-./build/ledyrochen --vendor-font-dir ../RocheLCD/vendor "洛汐" "LUOXI OK" "你好，世界"
+./build/ledyrochen --vendor-font-dir ../RocheLCD/vendor "零音" "LYCN OK" "你好，世界"
 ```
 
 常用选项：
