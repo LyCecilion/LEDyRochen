@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "constants.hpp"
 #include "device.hpp"
 #include "protocol.hpp"
 #include "truetype.hpp"
@@ -25,6 +26,7 @@ struct Options
     std::optional<std::string> device;
     bool dry_run{false};
     bool show_preview{false};
+    bool verbose{false};
     std::filesystem::path font;
     std::filesystem::path vendor_font_dir;
     bool no_vendor_font{false};
@@ -52,6 +54,7 @@ Options:
   --speed N[,N...]          Speed 1..8 per message, comma-separated (default: 4)
   --mode MODE[,MODE...]     Display mode per message, comma-separated (default: left)
   --brightness N            25, 50, 75 or 100 (default: 50)
+  --verbose                Print USB diagnostics to stderr
   --blink SLOT[,SLOT...]    Enable blink for the given message slots (1..8 or all)
   --border SLOT[,SLOT...]   Enable border for the given message slots (1..8 or all)
   -h, --help                Show this help
@@ -147,6 +150,7 @@ auto parse_options(int argc, char **argv) -> Options
         device,
         dry_run,
         preview,
+        verbose,
         font,
         vendor_font_dir,
         no_vendor_font,
@@ -158,12 +162,13 @@ auto parse_options(int argc, char **argv) -> Options
         blink,
         border,
     };
-    const std::array<option, 16> options = {
+    const std::array<option, 17> options = {
         option{
             .name = "list-devices", .has_arg = no_argument, .flag = nullptr, .val = list_devices},
         option{.name = "device", .has_arg = required_argument, .flag = nullptr, .val = device},
         option{.name = "dry-run", .has_arg = no_argument, .flag = nullptr, .val = dry_run},
         option{.name = "preview", .has_arg = no_argument, .flag = nullptr, .val = preview},
+        option{.name = "verbose", .has_arg = no_argument, .flag = nullptr, .val = verbose},
         option{.name = "font", .has_arg = required_argument, .flag = nullptr, .val = font},
         option{.name = "vendor-font-dir",
                .has_arg = required_argument,
@@ -210,6 +215,9 @@ auto parse_options(int argc, char **argv) -> Options
             break;
         case preview:
             result.show_preview = true;
+            break;
+        case verbose:
+            result.verbose = true;
             break;
         case font:
             result.font = optarg;
@@ -279,9 +287,9 @@ auto parse_options(int argc, char **argv) -> Options
     return result;
 }
 
-auto list_devices() -> int
+auto list_devices(std::ostream *log = nullptr) -> int
 {
-    auto devices = BadgeDevice::find_all();
+    auto devices = BadgeDevice::find_all(log);
     if (devices.empty())
     {
         std::cout << "No 0416:5020 devices found\n";
@@ -294,9 +302,10 @@ auto list_devices() -> int
     return 0;
 }
 
-auto select_device(std::optional<std::string_view> selector) -> BadgeDevice
+auto select_device(std::optional<std::string_view> selector,
+                   std::ostream *log = nullptr) -> BadgeDevice
 {
-    auto devices = BadgeDevice::find_all();
+    auto devices = BadgeDevice::find_all(log);
     if (devices.empty())
     {
         throw std::runtime_error(
@@ -323,6 +332,7 @@ auto select_device(std::optional<std::string_view> selector) -> BadgeDevice
 
 auto run(const Options &options) -> int
 {
+    auto *const log = options.verbose ? &std::cerr : nullptr;
     if (options.show_help)
     {
         print_help(std::cout);
@@ -330,7 +340,7 @@ auto run(const Options &options) -> int
     }
     if (options.list_devices)
     {
-        return list_devices();
+        return list_devices(log);
     }
     if (options.messages.empty() || options.messages.size() > MAX_MESSAGES)
     {
@@ -397,10 +407,10 @@ auto run(const Options &options) -> int
 
     const auto selector = options.device ? std::optional<std::string_view>(*options.device)
                                          : std::optional<std::string_view>{};
-    auto device = select_device(selector);
+    auto device = select_device(selector, log);
     std::cout << "writing to: " << device.description() << '\n';
-    device.write(payload);
-    std::cout << "write complete. Unplug USB or press the display button to view.\n";
+    device.write(payload, WRITE_DELAY, TRANSFER_TIMEOUT, log);
+    std::cout << "write complete. The content should now be on screen; unplug USB to redisplay.\n";
     return 0;
 }
 } // namespace
