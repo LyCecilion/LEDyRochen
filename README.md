@@ -47,16 +47,30 @@ sudo udevadm control --reload-rules
 ./build/ledyrochen --list-devices
 ```
 
+需要排查设备发现或写入问题时，加上 `--verbose`：
+
+```console
+./build/ledyrochen --verbose --list-devices
+./build/ledyrochen --verbose "洛汐"
+```
+
+诊断日志仅写入 stderr，不改变正常 stdout 输出或退出状态；默认不输出诊断日志。
+日志包含 USB 总线与设备地址、十六进制 VID:PID、配置与接口/端点选择，
+以及每个报告包的 OUT/ACK 阶段、传输字节数和 libusb 状态。
+传输前会记录当前阶段，方便定位卡在发送还是等待 ACK；失败仍按原有错误处理退出。
+可用 `2>usb.log` 保存诊断与错误信息；分享前请检查其中的设备标识。
+`--dry-run` 不访问 USB，因此即使指定 `--verbose` 也不会产生 USB 诊断日志。
+
 预览并只编码、不写入：
 
 ```console
-./build/ledyrochen --vendor-font-dir ../RocheLCD/vendor --preview --dry-run "零音"
+./build/ledyrochen --vendor-font-dir ./vendor --preview --dry-run "零音"
 ```
 
 写入一至八条循环消息：
 
 ```console
-./build/ledyrochen --vendor-font-dir ../RocheLCD/vendor "零音" "LYCN OK" "你好，世界"
+./build/ledyrochen --vendor-font-dir ./vendor "零音" "LYCN OK" "你好，世界"
 ```
 
 常用选项：
@@ -66,8 +80,9 @@ sudo udevadm control --reload-rules
 --speed 1..8
 --brightness 25|50|75|100
 --mode left|right|up|down|still|animation|drop|curtain|laser
---blink
---border
+--blink SLOT[,SLOT...]       # 槽位为 1..8 或 all
+--border SLOT[,SLOT...]
+--verbose
 --font /path/to/font.ttf
 --font-size 11
 --threshold 96
